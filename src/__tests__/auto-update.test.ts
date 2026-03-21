@@ -453,6 +453,7 @@ describe('auto-update reconciliation', () => {
       encoding: 'utf-8',
       stdio: 'pipe',
       timeout: 60000,
+      shell: true,
       windowsHide: true,
       env: expect.objectContaining({ OMC_UPDATE_RECONCILE: '1' }),
     }));
@@ -502,6 +503,11 @@ describe('auto-update reconciliation', () => {
     expect(result.success).toBe(false);
     expect(result.message).toBe('Updated to 4.1.6, but runtime reconciliation failed');
     expect(result.errors).toEqual(['spawnSync C:\\Users\\bellman\\AppData\\Roaming\\npm\\omc.cmd ENOENT']);
+    expect(mockedExecFileSync).toHaveBeenNthCalledWith(2, 'C:\\Users\\bellman\\AppData\\Roaming\\npm\\omc.cmd', ['update-reconcile'], expect.objectContaining({
+      shell: true,
+      windowsHide: true,
+      env: expect.objectContaining({ OMC_UPDATE_RECONCILE: '1' }),
+    }));
     expect(mockedWriteFileSync).not.toHaveBeenCalled();
   });
 

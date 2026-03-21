@@ -650,7 +650,7 @@ export async function performUpdate(options?: {
             stdio: options?.verbose ? 'inherit' : 'pipe',
             timeout: 60000,
             env: { ...process.env, OMC_UPDATE_RECONCILE: '1' },
-            ...(process.platform === 'win32' ? { windowsHide: true } : {}),
+            ...(process.platform === 'win32' ? { windowsHide: true, shell: true } : {}),
           });
         } catch (reconcileError) {
           return {
