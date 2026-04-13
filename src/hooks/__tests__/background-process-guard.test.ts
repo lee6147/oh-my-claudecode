@@ -506,6 +506,30 @@ describe('Background Process Guard (issue #302)', () => {
       }
     });
 
+    it('should block repo-scoped inspection Bash commands from non-git temp dirs', async () => {
+      const nonGitDir = mkdtempSync(join(tmpdir(), 'omc-bg-readonly-non-git-'));
+      mkdirSync(join(nonGitDir, 'src'), { recursive: true });
+      writeFileSync(join(nonGitDir, 'src', 'sample.ts'), 'export const value = 1;\n');
+
+      try {
+        const input: HookInput = {
+          sessionId: 'test-session',
+          toolName: 'Bash',
+          toolInput: {
+            command: 'cat src/sample.ts',
+            run_in_background: true,
+          },
+          directory: nonGitDir,
+        };
+
+        const result = await processHook('pre-tool-use', input);
+        expect(result.continue).toBe(false);
+        expect(result.reason).toContain('[BACKGROUND PERMISSIONS]');
+      } finally {
+        rmSync(nonGitDir, { recursive: true, force: true });
+      }
+    });
+
     it('should keep single-test Bash commands in background', async () => {
       const relativeRoot = 'tmp-bg-testcmd';
       const repoDir = join(resolvedDirectory, relativeRoot);
@@ -528,6 +552,30 @@ describe('Background Process Guard (issue #302)', () => {
         expect(result.message ?? '').not.toContain('[BACKGROUND PERMISSIONS]');
       } finally {
         rmSync(repoDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should block single-test Bash commands from non-git temp dirs', async () => {
+      const nonGitDir = mkdtempSync(join(tmpdir(), 'omc-bg-testcmd-non-git-'));
+      mkdirSync(join(nonGitDir, 'src', '__tests__'), { recursive: true });
+      writeFileSync(join(nonGitDir, 'src', '__tests__', 'sample.test.ts'), 'test("x", () => {});\n');
+
+      try {
+        const input: HookInput = {
+          sessionId: 'test-session',
+          toolName: 'Bash',
+          toolInput: {
+            command: 'vitest run src/__tests__/sample.test.ts',
+            run_in_background: true,
+          },
+          directory: nonGitDir,
+        };
+
+        const result = await processHook('pre-tool-use', input);
+        expect(result.continue).toBe(false);
+        expect(result.reason).toContain('[BACKGROUND PERMISSIONS]');
+      } finally {
+        rmSync(nonGitDir, { recursive: true, force: true });
       }
     });
 

@@ -36,6 +36,7 @@ const SAFE_PATTERNS = [
   /^pnpm (lint|build|check|typecheck|run (lint|build|check|typecheck))/,
   /^yarn (lint|build|check|typecheck|run (lint|build|check|typecheck))/,
   /^tsc( |$)/,
+  /^gh (issue|pr) (view|list|status)\b/,
   /^eslint /,
   /^prettier /,
   /^cargo (check|clippy|build)/,
@@ -345,7 +346,10 @@ function isSafeRepoPath(
     return false;
   }
 
-  const worktreeRoot = getWorktreeRoot(cwd) || cwd;
+  const worktreeRoot = getWorktreeRoot(cwd);
+  if (!worktreeRoot) {
+    return false;
+  }
   const resolvedPath = path.resolve(cwd, inputPath);
 
   let canonicalPath = resolvedPath;

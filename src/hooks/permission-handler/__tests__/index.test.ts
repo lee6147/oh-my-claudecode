@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
+import { clearWorktreeCache } from '../../../lib/worktree-paths.js';
 import {
   isSafeCommand,
   isSafeRepoInspectionCommand,
@@ -10,6 +12,13 @@ import {
   processPermissionRequest,
 } from '../index.js';
 import type { PermissionRequestInput } from '../index.js';
+
+function initializeGitRepo(directory: string): void {
+  execFileSync('git', ['init', '--quiet'], {
+    cwd: directory,
+    stdio: 'pipe',
+  });
+}
 
 describe('permission-handler', () => {
   describe('isSafeCommand', () => {
@@ -34,6 +43,11 @@ describe('permission-handler', () => {
         'ls "my folder"',
         'ls \'my folder\'',
         'git diff "src/file with spaces.ts"',
+        'gh issue list',
+        'gh issue view 2508',
+        'gh issue status',
+        'gh pr view 2510',
+        'gh pr list --state open',
       ];
 
       safeCases.forEach((cmd) => {
@@ -178,7 +192,7 @@ describe('permission-handler', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
       fs.mkdirSync(path.join(testDir, 'src'), { recursive: true });
       fs.writeFileSync(path.join(testDir, 'src', 'sample.ts'), 'export const value = 1;\n');
-      fs.mkdirSync(path.join(testDir, '.git'), { recursive: true });
+      initializeGitRepo(testDir);
       fs.writeFileSync(path.join(testDir, '.env.local'), 'SECRET=1\n');
     });
 
@@ -199,6 +213,20 @@ describe('permission-handler', () => {
       expect(isSafeRepoInspectionCommand('rg -n value .git', testDir)).toBe(false);
       expect(isSafeRepoInspectionCommand('sed -n 1,20p missing.ts', testDir)).toBe(false);
     });
+
+    it('rejects repo inspection commands when cwd is not inside a git worktree', () => {
+      const nonGitDir = fs.mkdtempSync('/tmp/omc-permission-safe-inspection-non-git-');
+
+      try {
+        fs.mkdirSync(path.join(nonGitDir, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(nonGitDir, 'src', 'sample.ts'), 'export const value = 1;\n');
+
+        expect(isSafeRepoInspectionCommand('cat src/sample.ts', nonGitDir)).toBe(false);
+        expect(isSafeRepoInspectionCommand('rg -n value src', nonGitDir)).toBe(false);
+      } finally {
+        fs.rmSync(nonGitDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('targeted local test commands', () => {
@@ -208,7 +236,7 @@ describe('permission-handler', () => {
       fs.rmSync(testDir, { recursive: true, force: true });
       fs.mkdirSync(path.join(testDir, 'src', '__tests__'), { recursive: true });
       fs.writeFileSync(path.join(testDir, 'src', '__tests__', 'sample.test.ts'), 'test("x", () => {});\n');
-      fs.mkdirSync(path.join(testDir, '.git'), { recursive: true });
+      initializeGitRepo(testDir);
     });
 
     afterEach(() => {
@@ -227,6 +255,20 @@ describe('permission-handler', () => {
       expect(isSafeTargetedLocalTestCommand('vitest run', testDir)).toBe(false);
       expect(isSafeTargetedLocalTestCommand('vitest run src/__tests__/sample.test.ts --watch', testDir)).toBe(false);
       expect(isSafeTargetedLocalTestCommand('vitest run ../other.test.ts', testDir)).toBe(false);
+    });
+
+    it('rejects targeted test commands when cwd is not inside a git worktree', () => {
+      const nonGitDir = fs.mkdtempSync('/tmp/omc-permission-safe-tests-non-git-');
+
+      try {
+        fs.mkdirSync(path.join(nonGitDir, 'src', '__tests__'), { recursive: true });
+        fs.writeFileSync(path.join(nonGitDir, 'src', '__tests__', 'sample.test.ts'), 'test("x", () => {});\n');
+
+        expect(isSafeTargetedLocalTestCommand('vitest run src/__tests__/sample.test.ts', nonGitDir)).toBe(false);
+        expect(isSafeTargetedLocalTestCommand('node --test src/__tests__/sample.test.ts', nonGitDir)).toBe(false);
+      } finally {
+        fs.rmSync(nonGitDir, { recursive: true, force: true });
+      }
     });
   });
 
@@ -423,6 +465,7 @@ describe('permission-handler', () => {
     const stateDir = path.join(testDir, '.omc', 'state');
 
     beforeEach(() => {
+      clearWorktreeCache();
       if (fs.existsSync(testDir)) {
         fs.rmSync(testDir, { recursive: true, force: true });
       }
@@ -432,6 +475,7 @@ describe('permission-handler', () => {
       if (fs.existsSync(testDir)) {
         fs.rmSync(testDir, { recursive: true, force: true });
       }
+      clearWorktreeCache();
     });
 
     const createInput = (command: string): PermissionRequestInput => ({
@@ -456,6 +500,7 @@ describe('permission-handler', () => {
       it('should auto-approve safe repo inspection commands', () => {
         fs.mkdirSync(path.join(testDir, 'src'), { recursive: true });
         fs.writeFileSync(path.join(testDir, 'src', 'safe.ts'), 'export const value = 1;\n');
+        initializeGitRepo(testDir);
 
         const result = processPermissionRequest(createInput('cat src/safe.ts'));
         expect(result.continue).toBe(true);
@@ -465,10 +510,25 @@ describe('permission-handler', () => {
       it('should auto-approve narrowly targeted local test commands', () => {
         fs.mkdirSync(path.join(testDir, 'src', '__tests__'), { recursive: true });
         fs.writeFileSync(path.join(testDir, 'src', '__tests__', 'safe.test.ts'), 'test("x", () => {});\n');
+        initializeGitRepo(testDir);
 
         const result = processPermissionRequest(createInput('vitest run src/__tests__/safe.test.ts'));
         expect(result.continue).toBe(true);
         expect(result.hookSpecificOutput?.decision?.behavior).toBe('allow');
+      });
+
+      it('should not auto-approve repo-scoped commands outside a git worktree', () => {
+        fs.mkdirSync(path.join(testDir, 'src', '__tests__'), { recursive: true });
+        fs.writeFileSync(path.join(testDir, 'src', 'safe.ts'), 'export const value = 1;\n');
+        fs.writeFileSync(path.join(testDir, 'src', '__tests__', 'safe.test.ts'), 'test("x", () => {});\n');
+
+        const inspectionResult = processPermissionRequest(createInput('cat src/safe.ts'));
+        expect(inspectionResult.continue).toBe(true);
+        expect(inspectionResult.hookSpecificOutput?.decision?.behavior).not.toBe('allow');
+
+        const testResult = processPermissionRequest(createInput('vitest run src/__tests__/safe.test.ts'));
+        expect(testResult.continue).toBe(true);
+        expect(testResult.hookSpecificOutput?.decision?.behavior).not.toBe('allow');
       });
 
       it('should reject unsafe commands even when pattern matches prefix', () => {

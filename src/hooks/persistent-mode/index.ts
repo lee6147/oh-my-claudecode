@@ -52,6 +52,7 @@ import { readTeamPipelineState } from '../team-pipeline/state.js';
 import type { TeamPipelinePhase } from '../team-pipeline/types.js';
 import { getActiveAgentSnapshot } from '../subagent-tracker/index.js';
 import type { IdleNotificationRepoState } from './idle-repo-state.js';
+import { truncatePromptForEcho } from '../../lib/truncate-prompt.js';
 
 export interface ToolErrorState {
   tool_name: string;
@@ -338,6 +339,41 @@ function isRepeatedZeroBacklogCooldown(
   );
 }
 
+function hasRepeatedZeroBacklogCooldown(
+  stateDir: string,
+  sessionId?: string,
+  repoState?: IdleNotificationRepoState | null,
+): boolean {
+  const cooldownPath = getIdleNotificationCooldownPath(stateDir, sessionId);
+  const cooldownRecord = readIdleNotificationCooldownRecord(cooldownPath);
+
+  if (isRepeatedZeroBacklogCooldown(cooldownRecord, repoState)) {
+    return true;
+  }
+
+  if (cooldownPath !== getGlobalIdleNotificationCooldownPath(stateDir)) {
+    const globalRecord = readIdleNotificationCooldownRecord(getGlobalIdleNotificationCooldownPath(stateDir));
+    if (isRepeatedZeroBacklogCooldown(globalRecord, repoState)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * OpenClaw stop wakes should usually bypass idle cooldowns, but unchanged
+ * zero-backlog repo state should stay suppressed so stale repo-level CI replay
+ * bursts do not re-arm after the actionable backlog is already zero.
+ */
+export function shouldWakeOpenClawOnStop(
+  stateDir: string,
+  sessionId?: string,
+  repoState?: IdleNotificationRepoState | null,
+): boolean {
+  return !hasRepeatedZeroBacklogCooldown(stateDir, sessionId, repoState);
+}
+
 /**
  * Check whether the session-idle notification cooldown has elapsed.
  * Returns true if the notification should be sent.
@@ -351,18 +387,8 @@ export function shouldSendIdleNotification(
   const cooldownPath = getIdleNotificationCooldownPath(stateDir, sessionId);
   const cooldownRecord = readIdleNotificationCooldownRecord(cooldownPath);
 
-  if (isRepeatedZeroBacklogCooldown(cooldownRecord, repoState)) {
+  if (hasRepeatedZeroBacklogCooldown(stateDir, sessionId, repoState)) {
     return false;
-  }
-
-  // Back off unchanged zero-backlog nudges across follow-up sessions too.
-  // Session-scoped cooldown should not keep rearming identical "all clear"
-  // alerts for brand-new session ids when the repo state has not changed.
-  if (cooldownPath !== getGlobalIdleNotificationCooldownPath(stateDir)) {
-    const globalRecord = readIdleNotificationCooldownRecord(getGlobalIdleNotificationCooldownPath(stateDir));
-    if (isRepeatedZeroBacklogCooldown(globalRecord, repoState)) {
-      return false;
-    }
   }
 
   if (repoState && typeof cooldownRecord?.repoSignature === 'string') {
@@ -820,7 +846,7 @@ ${prdInstruction}
 4. When FULLY complete (after ${state.critic_mode === 'codex' ? 'Codex critic' : state.critic_mode === 'critic' ? 'Critic' : 'Architect'} verification), run \`/oh-my-claudecode:cancel\` to cleanly exit and clean up state files. If cancel fails, retry with \`/oh-my-claudecode:cancel --force\`.
 5. Do NOT stop until the task is truly done
 
-${newState.prompt ? `Original task: ${newState.prompt}` : ''}
+${newState.prompt ? `Original task: ${truncatePromptForEcho(newState.prompt)}` : ''}
 
 </ralph-continuation>
 
