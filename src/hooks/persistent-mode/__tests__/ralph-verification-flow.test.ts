@@ -288,4 +288,76 @@ describe('Ralph verification flow', () => {
     const updatedState = readRalphState(testDir, sessionId);
     expect(updatedState?.current_story_id).toBe('US-001');
   });
+
+  it('does not accept approval text that only appears inside the injected verification prompt', async () => {
+    const sessionId = 'ralph-injected-approval-text';
+    const sessionDir = join(testDir, '.omc', 'state', 'sessions', sessionId);
+    mkdirSync(sessionDir, { recursive: true });
+
+    const prd: PRD = {
+      project: 'Test',
+      branchName: 'ralph/test',
+      description: 'Prompt-injected approval should not count',
+      userStories: [
+        {
+          id: 'US-001',
+          title: 'Current story',
+          description: 'Needs real fresh reviewer output',
+          acceptanceCriteria: ['Current story criterion'],
+          priority: 1,
+          passes: true,
+          architectVerified: false,
+        },
+        {
+          id: 'US-002',
+          title: 'Next story',
+          description: 'Must remain blocked',
+          acceptanceCriteria: ['Next story criterion'],
+          priority: 2,
+          passes: false,
+          architectVerified: false,
+        },
+      ],
+    };
+
+    writePrd(testDir, prd);
+    writeRalphState(sessionId, { current_story_id: 'US-001' });
+    writeFileSync(join(sessionDir, 'ralph-verification-state.json'), JSON.stringify({
+      pending: true,
+      completion_claim: 'US-001 is ready to progress',
+      verification_attempts: 0,
+      max_verification_attempts: 3,
+      requested_at: new Date().toISOString(),
+      original_task: 'Implement issue #2604',
+      critic_mode: 'architect',
+      verification_scope: 'story',
+      story_id: 'US-001',
+      request_id: 'current-request',
+    }));
+
+    const transcriptDir = join(claudeConfigDir, 'sessions', sessionId);
+    mkdirSync(transcriptDir, { recursive: true });
+    writeFileSync(
+      join(transcriptDir, 'transcript.md'),
+      [
+        '<ralph-verification>',
+        "3. **Based on Architect's response:**",
+        '   - If APPROVED: Output the exact correlated approval tag `<ralph-approved critic="architect" request-id="current-request" story-id="US-001">VERIFIED_COMPLETE</ralph-approved>`, then run `/oh-my-claudecode:cancel` to cleanly exit',
+        '</ralph-verification>',
+      ].join('\n')
+    );
+
+    const result = await checkPersistentModes(sessionId, testDir);
+
+    expect(result.shouldBlock).toBe(true);
+    expect(result.mode).toBe('ralph');
+    expect(result.message).toContain('request-id="current-request"');
+    expect(result.message).toContain('story-id="US-001"');
+
+    const updatedPrd = readPrd(testDir);
+    expect(updatedPrd?.userStories[0].architectVerified).toBe(false);
+
+    const updatedState = readRalphState(testDir, sessionId);
+    expect(updatedState?.current_story_id).toBe('US-001');
+  });
 });

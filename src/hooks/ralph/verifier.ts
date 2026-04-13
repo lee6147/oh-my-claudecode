@@ -325,11 +325,18 @@ function extractApprovalAttribute(attributes: string, attributeName: string): st
   return match?.[2];
 }
 
+function stripInjectedApprovalExamples(text: string): string {
+  return text
+    .replace(/<ralph-verification>[\s\S]*?<\/ralph-verification>/gi, ' ')
+    .replace(/`<(?:architect-approved|ralph-approved)\b[\s\S]*?<\/(?:architect-approved|ralph-approved)>`/gi, ' ');
+}
+
 export function detectArchitectApproval(
   text: string,
   expected?: Pick<VerificationState, 'request_id' | 'story_id'>
 ): boolean {
-  const matches = text.matchAll(/<(?:architect-approved|ralph-approved)\b([^>]*)>.*?VERIFIED_COMPLETE.*?<\/(?:architect-approved|ralph-approved)>/gis);
+  const sanitizedText = stripInjectedApprovalExamples(text);
+  const matches = sanitizedText.matchAll(/<(?:architect-approved|ralph-approved)\b([^>]*)>.*?VERIFIED_COMPLETE.*?<\/(?:architect-approved|ralph-approved)>/gis);
 
   for (const match of matches) {
     const attributes = match[1] ?? '';

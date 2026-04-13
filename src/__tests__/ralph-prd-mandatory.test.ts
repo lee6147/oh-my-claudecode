@@ -380,6 +380,18 @@ describe('Ralph PRD-Mandatory', () => {
       expect(detectArchitectApproval(staleApproval, { request_id: 'new-request', story_id: 'US-001' })).toBe(false);
     });
 
+    it('ignores approval tags embedded inside the verification prompt itself', () => {
+      const state = {
+        ...baseVerificationState,
+        critic_mode: 'codex' as const,
+        request_id: 'req-injected',
+        story_id: 'US-001',
+      };
+      const prompt = getArchitectVerificationPrompt(state);
+
+      expect(detectArchitectApproval(prompt, { request_id: 'req-injected', story_id: 'US-001' })).toBe(false);
+    });
+
     it('detects codex-style rejection language', () => {
       const result = detectArchitectRejection('Codex reviewer found issues: Missing tests.');
       expect(result.rejected).toBe(true);
