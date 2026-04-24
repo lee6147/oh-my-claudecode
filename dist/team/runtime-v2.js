@@ -1045,6 +1045,13 @@ export async function monitorTeamV2(teamName, cwd) {
             status,
             heartbeat,
             assignedTasks: w.assigned_tasks,
+            working_dir: w.working_dir,
+            worktree_repo_root: w.worktree_repo_root,
+            worktree_path: w.worktree_path,
+            worktree_branch: w.worktree_branch,
+            worktree_detached: w.worktree_detached,
+            worktree_created: w.worktree_created,
+            team_state_root: w.team_state_root,
             turnsWithoutProgress,
         });
         if (!alive) {

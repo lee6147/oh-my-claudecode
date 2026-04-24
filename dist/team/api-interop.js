@@ -661,9 +661,11 @@ export async function executeTeamApiOperation(operation, args, fallbackCwd) {
                     pid: args.pid,
                     pane_id: args.pane_id,
                     working_dir: args.working_dir,
+                    worktree_repo_root: args.worktree_repo_root,
                     worktree_path: args.worktree_path,
                     worktree_branch: args.worktree_branch,
                     worktree_detached: args.worktree_detached,
+                    worktree_created: args.worktree_created,
                     team_state_root: args.team_state_root,
                 }, cwd);
                 return { ok: true, operation, data: { worker } };

@@ -357,6 +357,10 @@ export async function teamStatusByTeamName(teamName, cwd = process.cwd()) {
             workerPaneIds: Array.from(new Set((config?.workers ?? [])
                 .map((worker) => worker.pane_id)
                 .filter((paneId) => typeof paneId === 'string' && paneId.trim().length > 0))),
+            workspaceMode: config?.workspace_mode,
+            worktreeMode: config?.worktree_mode,
+            teamStateRoot: config?.team_state_root,
+            workers: config?.workers ?? [],
             snapshot,
         };
     }
@@ -508,9 +512,9 @@ Examples:
   omc team api list-tasks --input '{"teamName":"auth-review"}' --json
   omc team 3:codex "refactor launch command"
 
-Worktree mode:
-  Native worker worktrees are opt-in/config-gated for runtime-v2.
-  Status surfaces workspace_mode, worktree_mode, team_state_root, and worker worktree metadata when enabled.
+Notes:
+  Native team worktree mode is opt-in/config-gated during rollout.
+  team status JSON includes workspace mode, canonical state root, and worker worktree metadata when present.
 `.trim();
 function parseStartArgs(args) {
     const agentValues = [];
