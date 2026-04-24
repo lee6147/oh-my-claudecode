@@ -3,8 +3,8 @@ import { mkdtemp, readFile, rm } from 'fs/promises';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 
-import { executeTeamApiOperation } from '../api-interop.js';
 import { readTeamConfig, saveTeamConfig } from '../monitor.js';
+import { teamWriteWorkerIdentity } from '../team-ops.js';
 import type { TeamConfig, TeamManifestV2, WorkerInfo } from '../types.js';
 
 describe('native worktree contract fields', () => {
@@ -122,19 +122,14 @@ describe('native worktree contract fields', () => {
     }
   });
 
-  it('write-worker-identity accepts the full worktree metadata payload', async () => {
+  it('worker identity persistence accepts the full worktree metadata payload', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omc-worktree-identity-'));
     try {
-      const { mkdir } = await import('fs/promises');
-      await mkdir(join(cwd, '.omc', 'state', 'team', 'demo-team', 'workers', 'worker-1'), { recursive: true });
-
-      const previousStateRoot = process.env.OMC_TEAM_STATE_ROOT;
-      delete process.env.OMC_TEAM_STATE_ROOT;
-      const result = await executeTeamApiOperation('write-worker-identity', {
-        team_name: 'demo-team',
-        worker: 'worker-1',
+      await teamWriteWorkerIdentity('demo-team', 'worker-1', {
+        name: 'worker-1',
         index: 1,
         role: 'executor',
+        assigned_tasks: [],
         working_dir: join(cwd, '.omc', 'team', 'demo-team', 'worktrees', 'worker-1'),
         worktree_repo_root: resolve(cwd),
         worktree_path: join(cwd, '.omc', 'team', 'demo-team', 'worktrees', 'worker-1'),
@@ -143,12 +138,6 @@ describe('native worktree contract fields', () => {
         worktree_created: true,
         team_state_root: join(cwd, '.omc', 'state'),
       }, cwd);
-      if (previousStateRoot === undefined) {
-        delete process.env.OMC_TEAM_STATE_ROOT;
-      } else {
-        process.env.OMC_TEAM_STATE_ROOT = previousStateRoot;
-      }
-      expect(result.ok).toBe(true);
 
       const identity = JSON.parse(await readFile(join(cwd, '.omc', 'state', 'team', 'demo-team', 'workers', 'worker-1', 'identity.json'), 'utf-8')) as WorkerInfo;
       expect(identity).toMatchObject({
