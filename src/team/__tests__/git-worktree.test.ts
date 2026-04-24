@@ -143,8 +143,13 @@ describe('git-worktree', () => {
 
   describe('worktree root AGENTS.md lifecycle', () => {
     it('installs a managed overlay and removes it on cleanup when no root AGENTS.md existed', () => {
+      rmSync(join(repoDir, 'AGENTS.md'));
+      execFileSync('git', ['add', '-u', 'AGENTS.md'], { cwd: repoDir, stdio: 'pipe' });
+      execFileSync('git', ['commit', '-m', 'Remove root agents'], { cwd: repoDir, stdio: 'pipe' });
+
       const info = createWorkerWorktree(teamName, 'worker-agents-new', repoDir);
       const agentsPath = join(info.path, 'AGENTS.md');
+      expect(existsSync(agentsPath)).toBe(false);
 
       installWorktreeRootAgents(teamName, 'worker-agents-new', repoDir, info.path, 'managed overlay\n');
       expect(readFileSync(agentsPath, 'utf-8')).toBe('managed overlay\n');

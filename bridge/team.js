@@ -5097,6 +5097,13 @@ function restoreWorktreeRootAgents(teamName, workerName, repoRoot, worktreePath)
   if (!backup) return { restored: false, reason: "no_backup" };
   const resolvedWorktreePath = worktreePath ?? backup.worktreePath;
   validateResolvedPath(resolvedWorktreePath, repoRoot);
+  if (!existsSync10(resolvedWorktreePath)) {
+    try {
+      unlinkSync4(backupPath);
+    } catch {
+    }
+    return { restored: false, reason: "worktree_missing" };
+  }
   const agentsPath = join15(resolvedWorktreePath, "AGENTS.md");
   validateResolvedPath(agentsPath, repoRoot);
   const currentContent = existsSync10(agentsPath) ? readFileSync7(agentsPath, "utf-8") : void 0;
